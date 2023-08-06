@@ -10,6 +10,7 @@ import torch
 from transformers import AutoConfig
 from transformers import AutoModelForCausalLM
 from transformers import AutoTokenizer
+from transformers import LlamaTokenizer
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
 from alpaca_rlhf.deepspeed_chat.training.utils.model.model_utils import create_hf_model
@@ -192,7 +193,10 @@ def main():
 
     device = torch.device("cuda:0")
     config = AutoConfig.from_pretrained(args.model_name_or_path_baseline)
-    tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path_baseline, fast_tokenizer=True)
+    tokenizer_cls = LlamaTokenizer
+    tokenizer = tokenizer_cls.from_pretrained(
+        args.model_name_or_path_baseline, fast_tokenizer=True, add_eos_token=False
+    )
 
     model_baseline = create_hf_model(AutoModelForCausalLM, args.model_name_or_path_baseline, tokenizer, None)
     model_fintuned = create_hf_model(AutoModelForCausalLM, args.model_name_or_path_finetune, tokenizer, None)

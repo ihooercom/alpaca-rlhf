@@ -174,7 +174,7 @@ def main():
 
     torch.distributed.barrier()
 
-    tokenizer = LlamaTokenizer.from_pretrained(args.model_name_or_path, fast_tokenizer=False)
+    tokenizer = LlamaTokenizer.from_pretrained(args.model_name_or_path, fast_tokenizer=False, add_eos_token=False)
     # tokenizer.pad_token = tokenizer.eos_token
     tokenizer.pad_token_id = 0
     tokenizer.bos_token_id = 1

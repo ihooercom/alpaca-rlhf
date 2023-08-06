@@ -80,7 +80,7 @@ def parse_args():
     parser.add_argument(
         "--num_padding_at_beginning",
         type=int,
-        default=1,
+        default=0,
         help="OPT model has a fixed number (1) of padding tokens at the beginning of the input. "
         "We did not see this in other models but keep it as an option for now.",
     )
@@ -168,7 +168,6 @@ def print_args(model):
 def main():
     args = parse_args()
 
-    wandb.login(key="6c52cf61837ddd8efa62755b86139c41bbad09ec")
     project_name = "rlhf"
     experiment_name = "rlhf-step2"
     run_dir = os.path.join(args.data_output_path, "log", project_name, experiment_name)
@@ -176,12 +175,12 @@ def main():
         os.makedirs(str(run_dir))
     wandb.init(
         config=args,
-        entity="knowl",
+        # entity="knowl",
         project=project_name,
         name=experiment_name + "_" + datetime_utils.now(),
         dir=run_dir,
         job_type="training",
-        reinit=True,
+        # reinit=True,
         notes=socket.gethostname(),
     )
 
@@ -216,6 +215,7 @@ def main():
         tokenizer.bos_token_id = 1
         tokenizer.eos_token_id = 2
         tokenizer.add_eos_token = True
+        tokenizer.padding_side = "right"
     else:
         tokenizer = load_hf_tokenizer(args.model_name_or_path, fast_tokenizer=False)
 

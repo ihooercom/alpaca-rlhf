@@ -1,6 +1,5 @@
 # Copyright (c) Microsoft Corporation.
 # SPDX-License-Identifier: Apache-2.0
-
 # DeepSpeed Team
 """
 Run all steps with default settings:
@@ -26,13 +25,12 @@ Now we can run Step 3 with any combination of these models:
 $ python3 train.py --step 3 --actor-model 125m --reward-model 350m
 $ python3 train.py --step 3 --actor-model 350m --reward-model 125m
 """
-
 import argparse
-import warnings
-import subprocess
-import os
 import datetime
+import os
+import subprocess
 import time
+import warnings
 
 step_dirs = {
     1: "training/step1_supervised_finetuning",
@@ -97,9 +95,7 @@ def parse_args():
     args = parser.parse_args()
 
     if args.actor_zero_stage != "" or args.reward_zero_stage != "":
-        warnings.warn(
-            "Non-default zero stages may result in OOM errors or worse performance."
-        )
+        warnings.warn("Non-default zero stages may result in OOM errors or worse performance.")
 
     return args
 
@@ -116,9 +112,7 @@ def get_zero_stage(args, step_num):
 
 def get_output_dir(args, step_num):
     model_size = get_model_size(args, step_num)
-    output_dir = os.path.join(args.output_dir,
-                              f"{model_type[step_num]}-models",
-                              f"{model_size}")
+    output_dir = os.path.join(args.output_dir, f"{model_type[step_num]}-models", f"{model_size}")
     return output_dir
 
 
@@ -172,17 +166,21 @@ def launch_cmd(args, step_num, cmd):
     p = subprocess.Popen(cmd, cwd=working_dir, shell=True)
     p.wait()
     if p.returncode != 0:
-        raise RuntimeError('\n\n'.join((
-            f"Step {step_num} exited with non-zero status {p.returncode}",
-            f"Launch command: {cmd}",
-            f"Log output: {os.path.join(get_output_dir(args, step_num), 'training.log')}",
-            f"Please see our tutorial at {dse_url}{step_dirs[step_num]}",
-            "Please check that you have installed our requirements: `pip install -r requirements.txt`",
-            f"If you are seeing an OOM error, try modifying {get_script(args, step_num)}:",
-            "  - Reduce `--per_device_*_batch_size`",
-            "  - Increase `--zero_stage {0,1,2,3}` on multi-gpu setups",
-            "  - Enable `--gradient_checkpointing` or `--only_optimize_lora`"
-        )))
+        raise RuntimeError(
+            "\n\n".join(
+                (
+                    f"Step {step_num} exited with non-zero status {p.returncode}",
+                    f"Launch command: {cmd}",
+                    f"Log output: {os.path.join(get_output_dir(args, step_num), 'training.log')}",
+                    f"Please see our tutorial at {dse_url}{step_dirs[step_num]}",
+                    "Please check that you have installed our requirements: `pip install -r requirements.txt`",
+                    f"If you are seeing an OOM error, try modifying {get_script(args, step_num)}:",
+                    "  - Reduce `--per_device_*_batch_size`",
+                    "  - Increase `--zero_stage {0,1,2,3}` on multi-gpu setups",
+                    "  - Enable `--gradient_checkpointing` or `--only_optimize_lora`",
+                )
+            )
+        )
 
 
 def main(args):

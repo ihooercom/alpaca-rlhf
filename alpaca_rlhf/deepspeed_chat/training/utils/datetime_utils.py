@@ -3,7 +3,7 @@ from datetime import datetime
 from datetime import timedelta
 
 
-def now(date_format='%Y%m%d_%H%M%S'):
+def now(date_format="%Y%m%d_%H%M%S"):
     """
 
     :param date_format:
@@ -14,5 +14,5 @@ def now(date_format='%Y%m%d_%H%M%S'):
     return result
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     print(now())

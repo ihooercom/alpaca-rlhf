@@ -1,16 +1,12 @@
 # Copyright (c) Microsoft Corporation.
 # SPDX-License-Identifier: Apache-2.0
-
 # DeepSpeed Team
-
 import argparse
 import subprocess
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--path",
-                        type=str,
-                        help="Directory containing trained actor model")
+    parser.add_argument("--path", type=str, help="Directory containing trained actor model")
     parser.add_argument(
         "--max_new_tokens",
         type=int,

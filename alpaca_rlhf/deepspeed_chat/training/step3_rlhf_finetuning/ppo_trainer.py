@@ -1,16 +1,15 @@
 # Copyright (c) Microsoft Corporation.
 # SPDX-License-Identifier: Apache-2.0
-
 # DeepSpeed Team
+import os
+import sys
+
+import deepspeed
 import torch
 import torch.nn.functional as F
-import sys
-import os
-import deepspeed
 from deepspeed.runtime.zero.partition_parameters import ZeroParamStatus
 
-sys.path.append(
-    os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
 
 from alpaca_rlhf.deepspeed_chat.training.utils.utils import print_rank_0
 
@@ -20,18 +19,15 @@ def print_all_ranks(tag, value, rank):
     all_tensor = torch.zeros(world_size, dtype=torch.float32).cuda()
     all_tensor[rank] = value
     torch.distributed.all_reduce(all_tensor, op=torch.distributed.ReduceOp.SUM)
-    print_rank_0(f'{tag} {all_tensor}', rank)
+    print_rank_0(f"{tag} {all_tensor}", rank)
 
 
 def get_model_norm(model):
     with torch.no_grad():
         total = 0.0
         for param in model.parameters():
-            should_gather = hasattr(
-                param,
-                'ds_id') and param.ds_status == ZeroParamStatus.NOT_AVAILABLE
-            with deepspeed.zero.GatheredParameters(param,
-                                                   enabled=should_gather):
+            should_gather = hasattr(param, "ds_id") and param.ds_status == ZeroParamStatus.NOT_AVAILABLE
+            with deepspeed.zero.GatheredParameters(param, enabled=should_gather):
                 total += float(param.float().norm())
 
     return total
@@ -43,8 +39,7 @@ def gather_log_probs(logits, labels):
     return log_probs_labels.squeeze(-1)
 
 
-class DeepSpeedPPOTrainer():
-
+class DeepSpeedPPOTrainer:
     def __init__(self, rlhf_engine, args):
         self.rlhf_engine = rlhf_engine
         self.actor_model = self.rlhf_engine.actor
@@ -54,8 +49,7 @@ class DeepSpeedPPOTrainer():
         self.tokenizer = self.rlhf_engine.tokenizer
         self.args = args
         self.max_answer_seq_len = args.max_answer_seq_len
-        self.end_of_conversation_token_id = self.tokenizer(
-            args.end_of_conversation_token)['input_ids'][-1]
+        self.end_of_conversation_token_id = self.tokenizer(args.end_of_conversation_token)["input_ids"][-1]
 
         # Those value can be changed
         self.kl_ctl = 0.02
@@ -70,10 +64,9 @@ class DeepSpeedPPOTrainer():
         max_min_length = self.max_answer_seq_len + prompts.shape[1]
 
         with torch.no_grad():
-            seq = self.actor_model.module.generate(prompts,
-                                                   attention_mask=mask,
-                                                   max_length=max_min_length,
-                                                   min_length=max_min_length)
+            seq = self.actor_model.module.generate(
+                prompts, attention_mask=mask, max_length=max_min_length, min_length=max_min_length
+            )
 
         # Filter out seq with no answers (or very short). This happens when users directly use the pre-training ckpt without supervised finetuning
         # NOTE: this will causes each GPU has different number of examples
@@ -84,15 +77,14 @@ class DeepSpeedPPOTrainer():
         valid_ans_len = (ans != self.tokenizer.pad_token_id).sum(dim=-1)
         out_seq = []
         for i in range(batch_size):
-            if valid_ans_len[
-                    i] <= 1:  # if the answer is shorter than 1 token, drop it
+            if valid_ans_len[i] <= 1:  # if the answer is shorter than 1 token, drop it
                 continue
             else:
                 eos_inds = (seq[i][prompt_length:] == self.tokenizer.eos_token_id).nonzero()
                 eos_ind = eos_inds[0].item() + prompt_length if len(eos_inds) > 0 else max_min_length
-                seq[i][eos_ind + 1:] = self.tokenizer.pad_token_id
+                seq[i][eos_ind + 1 :] = self.tokenizer.pad_token_id
 
-                out_seq.append(seq[i:i + 1])
+                out_seq.append(seq[i : i + 1])
         out_seq = torch.cat(out_seq, dim=0)  # concate output in the batch dim
 
         return out_seq
@@ -108,10 +100,9 @@ class DeepSpeedPPOTrainer():
         with torch.no_grad():
             output = self.actor_model(seq, attention_mask=attention_mask)
             output_ref = self.ref_model(seq, attention_mask=attention_mask)
-            reward_score = self.reward_model.forward_value(
-                seq, attention_mask,
-                prompt_length=self.prompt_length)['chosen_end_scores'].detach(
-                )
+            reward_score = self.reward_model.forward_value(seq, attention_mask, prompt_length=self.prompt_length)[
+                "chosen_end_scores"
+            ].detach()
             values_temp = self.critic_model.forward_value(seq, attention_mask, return_value_only=True)
             values = (values_temp * attention_mask).detach()[:, :-1]
 
@@ -119,20 +110,18 @@ class DeepSpeedPPOTrainer():
         logits_ref = output_ref.logits
 
         return {
-            'prompts': prompts,
-            'logprobs': gather_log_probs(logits[:, :-1, :], seq[:, 1:]),
-            'ref_logprobs': gather_log_probs(logits_ref[:, :-1, :], seq[:,
-                                                                        1:]),
-            'value': values,
-            'rewards': (reward_score - (-0.8677118420600891)) / 0.2210693359375,
+            "prompts": prompts,
+            "logprobs": gather_log_probs(logits[:, :-1, :], seq[:, 1:]),
+            "ref_logprobs": gather_log_probs(logits_ref[:, :-1, :], seq[:, 1:]),
+            "value": values,
+            "rewards": (reward_score - (-0.8677118420600891)) / 0.2210693359375,
             # 'value': values,
             # 'rewards': reward_score,
-            'input_ids': seq,
-            "attention_mask": attention_mask
+            "input_ids": seq,
+            "attention_mask": attention_mask,
         }
 
-    def compute_rewards(self, prompts, log_probs, ref_log_probs, reward_score,
-                        action_mask):
+    def compute_rewards(self, prompts, log_probs, ref_log_probs, reward_score, action_mask):
         """
         reward - kl
         :param prompts:
@@ -147,51 +136,43 @@ class DeepSpeedPPOTrainer():
         rewards = kl_divergence_estimate
         start = prompts.shape[1] - 1
         ends = start + action_mask[:, start:].sum(1)
-        reward_clip = torch.clamp(reward_score, -self.clip_reward_value,
-                                  self.clip_reward_value)
+        reward_clip = torch.clamp(reward_score, -self.clip_reward_value, self.clip_reward_value)
         batch_size = log_probs.shape[0]
         for j in range(batch_size):
-            rewards[j, start:ends[j]][-1] += reward_clip[j]
+            rewards[j, start : ends[j]][-1] += reward_clip[j]
 
         return rewards
 
     def train_rlhf(self, inputs):
         # train the rlhf mode here
         ### process the old outputs
-        prompts = inputs['prompts']
-        log_probs = inputs['logprobs']
-        ref_log_probs = inputs['ref_logprobs']
-        reward_score = inputs['rewards']
-        values = inputs['value']
-        attention_mask = inputs['attention_mask']
-        seq = inputs['input_ids']
+        prompts = inputs["prompts"]
+        log_probs = inputs["logprobs"]
+        ref_log_probs = inputs["ref_logprobs"]
+        reward_score = inputs["rewards"]
+        values = inputs["value"]
+        attention_mask = inputs["attention_mask"]
+        seq = inputs["input_ids"]
 
         start = prompts.size()[-1] - 1
         action_mask = attention_mask[:, 1:]
 
         old_values = values
         with torch.no_grad():
-            old_rewards = self.compute_rewards(prompts, log_probs,
-                                               ref_log_probs, reward_score,
-                                               action_mask)
-            advantages, returns = self.get_advantages_and_returns(
-                old_values, old_rewards, start)
+            old_rewards = self.compute_rewards(prompts, log_probs, ref_log_probs, reward_score, action_mask)
+            advantages, returns = self.get_advantages_and_returns(old_values, old_rewards, start)
 
         ### process the new outputs
-        batch = {'input_ids': seq, "attention_mask": attention_mask}
+        batch = {"input_ids": seq, "attention_mask": attention_mask}
         actor_prob = self.actor_model(**batch, use_cache=False).logits
         actor_log_prob = gather_log_probs(actor_prob[:, :-1, :], seq[:, 1:])
-        actor_loss = self.actor_loss_fn(actor_log_prob[:, start:],
-                                        log_probs[:, start:], advantages,
-                                        action_mask[:, start:])
+        actor_loss = self.actor_loss_fn(
+            actor_log_prob[:, start:], log_probs[:, start:], advantages, action_mask[:, start:]
+        )
         self.actor_model.backward(actor_loss)
         self.actor_model.step()
-        value = self.critic_model.forward_value(**batch,
-                                                return_value_only=True,
-                                                use_cache=False)[:, :-1]
-        critic_loss = self.critic_loss_fn(value[:, start:], old_values[:,
-                                                                       start:],
-                                          returns, action_mask[:, start:])
+        value = self.critic_model.forward_value(**batch, return_value_only=True, use_cache=False)[:, :-1]
+        critic_loss = self.critic_loss_fn(value[:, start:], old_values[:, start:], returns, action_mask[:, start:])
         self.critic_model.backward(critic_loss)
         self.critic_model.step()
 
@@ -202,8 +183,7 @@ class DeepSpeedPPOTrainer():
         log_ratio = (logprobs - old_logprobs) * mask
         ratio = torch.exp(log_ratio)
         pg_loss1 = -advantages * ratio
-        pg_loss2 = -advantages * torch.clamp(ratio, 1.0 - self.cliprange,
-                                             1.0 + self.cliprange)
+        pg_loss2 = -advantages * torch.clamp(ratio, 1.0 - self.cliprange, 1.0 + self.cliprange)
         pg_loss = torch.sum(torch.max(pg_loss1, pg_loss2) * mask) / mask.sum()
         return pg_loss
 
@@ -214,10 +194,9 @@ class DeepSpeedPPOTrainer():
             old_values - self.cliprange_value,
             old_values + self.cliprange_value,
         )
-        vf_loss1 = (values - returns)**2
-        vf_loss2 = (values_clipped - returns)**2
-        vf_loss = 0.5 * torch.sum(
-            torch.max(vf_loss1, vf_loss2) * mask) / mask.sum()
+        vf_loss1 = (values - returns) ** 2
+        vf_loss2 = (values_clipped - returns) ** 2
+        vf_loss = 0.5 * torch.sum(torch.max(vf_loss1, vf_loss2) * mask) / mask.sum()
         return vf_loss
 
     def get_advantages_and_returns(self, values, rewards, start):
@@ -260,18 +239,13 @@ class DeepSpeedPPOTrainer():
         ref_model_norm = get_model_norm(self.ref_model)
         critic_model_norm = get_model_norm(self.critic_model)
         reward_model_norm = get_model_norm(self.reward_model)
-        print_all_ranks(f'{tag} global_actor_model_norm', actor_model_norm,
-                        self.args.local_rank)
-        print_all_ranks(f'{tag} global_ref_model_norm', ref_model_norm,
-                        self.args.local_rank)
-        print_all_ranks(f'{tag} global_critic_model_norm', critic_model_norm,
-                        self.args.local_rank)
-        print_all_ranks(f'{tag} global_reward_model_norm', reward_model_norm,
-                        self.args.local_rank)
+        print_all_ranks(f"{tag} global_actor_model_norm", actor_model_norm, self.args.local_rank)
+        print_all_ranks(f"{tag} global_ref_model_norm", ref_model_norm, self.args.local_rank)
+        print_all_ranks(f"{tag} global_critic_model_norm", critic_model_norm, self.args.local_rank)
+        print_all_ranks(f"{tag} global_reward_model_norm", reward_model_norm, self.args.local_rank)
 
 
 class DeepSpeedPPOTrainerUnsupervised(DeepSpeedPPOTrainer):
-
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 

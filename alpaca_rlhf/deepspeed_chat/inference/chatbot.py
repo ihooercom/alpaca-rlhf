@@ -1,21 +1,21 @@
 # Copyright (c) Microsoft Corporation.
 # SPDX-License-Identifier: Apache-2.0
-
 # DeepSpeed Team
-
 import argparse
-import re
 import logging
+import re
+
 import transformers  # noqa: F401
-from transformers import pipeline, set_seed
-from transformers import AutoConfig, OPTForCausalLM, AutoTokenizer
+from transformers import AutoConfig
+from transformers import AutoTokenizer
+from transformers import OPTForCausalLM
+from transformers import pipeline
+from transformers import set_seed
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--path",
-                        type=str,
-                        help="Directory containing trained actor model")
+    parser.add_argument("--path", type=str, help="Directory containing trained actor model")
     parser.add_argument(
         "--max_new_tokens",
         type=int,
@@ -31,17 +31,12 @@ def get_generator(path):
     tokenizer.pad_token = tokenizer.eos_token
 
     model_config = AutoConfig.from_pretrained(path)
-    model = OPTForCausalLM.from_pretrained(path,
-                                           from_tf=bool(".ckpt" in path),
-                                           config=model_config).half()
+    model = OPTForCausalLM.from_pretrained(path, from_tf=bool(".ckpt" in path), config=model_config).half()
 
     model.config.end_token_id = tokenizer.eos_token_id
     model.config.pad_token_id = model.config.eos_token_id
     model.resize_token_embeddings(len(tokenizer))
-    generator = pipeline("text-generation",
-                         model=model,
-                         tokenizer=tokenizer,
-                         device="cuda:0")
+    generator = pipeline("text-generation", model=model, tokenizer=tokenizer, device="cuda:0")
     return generator
 
 
@@ -85,8 +80,7 @@ def main(args):
             user_input, num_rounds = "", 0
             continue
 
-        response = get_model_response(generator, user_input,
-                                      args.max_new_tokens)
+        response = get_model_response(generator, user_input, args.max_new_tokens)
         output = process_response(response, num_rounds)
 
         print("-" * 30 + f" Round {num_rounds} " + "-" * 30)

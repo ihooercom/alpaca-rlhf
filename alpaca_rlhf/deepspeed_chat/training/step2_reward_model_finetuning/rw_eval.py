@@ -1,40 +1,34 @@
 #!/usr/bin/env python
 # Copyright (c) Microsoft Corporation.
 # SPDX-License-Identifier: Apache-2.0
-
 # DeepSpeed Team
 import argparse
 import os
-import torch
-
-from transformers import AutoTokenizer
 import sys
 
+import torch
+from transformers import AutoTokenizer
 from transformers import LlamaTokenizer
 
-sys.path.append(
-    os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
 from alpaca_rlhf.deepspeed_chat.training.utils.model.model_utils import create_critic_model
 from alpaca_rlhf.deepspeed_chat.training.utils.utils import to_device
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(
-        description="Eval the finetued reward model")
+    parser = argparse.ArgumentParser(description="Eval the finetued reward model")
     parser.add_argument(
         "--model_name_or_path",
         type=str,
-        help=
-        "Path to pretrained model or model identifier from huggingface.co/models.",
+        help="Path to pretrained model or model identifier from huggingface.co/models.",
         # required=True,
-        default='/root/autodl-tmp/rlhf/critic'
+        default="/root/autodl-tmp/rlhf/critic",
     )
     parser.add_argument(
         "--num_padding_at_beginning",
         type=int,
         default=0,
-        help=
-        "OPT model has a fixed number (1) of padding tokens at the beginning of the input. "
+        help="OPT model has a fixed number (1) of padding tokens at the beginning of the input. "
         "We did not see this in other models but keep it as an option for now.",
     )
     args = parser.parse_args()
@@ -46,59 +40,38 @@ def load_stuff(model_name_or_path, num_padding_at_beginning):
     # tokenizer = AutoTokenizer.from_pretrained(model_name_or_path,
     #                                           fast_tokenizer=True)
     # tokenizer.pad_token = tokenizer.eos_token
-    tokenizer = LlamaTokenizer.from_pretrained(model_name_or_path,
-                                               fast_tokenizer=False)
+    tokenizer = LlamaTokenizer.from_pretrained(model_name_or_path, fast_tokenizer=False)
     tokenizer.pad_token_id = 0
     tokenizer.bos_token_id = 1
     tokenizer.eos_token_id = 2
     tokenizer.add_eos_token = True
-    model = create_critic_model(model_name_or_path, tokenizer, None,
-                                num_padding_at_beginning, True)
+    model = create_critic_model(model_name_or_path, tokenizer, None, num_padding_at_beginning, True)
 
     return model, tokenizer
 
 
-def prepare_datapair(prompt,
-                     good_ans,
-                     bad_ans,
-                     tokenizer,
-                     max_seq_len=512,
-                     end_of_conversation_token="<|endoftext|>"):
+def prepare_datapair(prompt, good_ans, bad_ans, tokenizer, max_seq_len=512, end_of_conversation_token="<|endoftext|>"):
     chosen_sentence = prompt + good_ans + end_of_conversation_token  # the accept response
     reject_sentence = prompt + bad_ans + end_of_conversation_token  # the reject response
-    chosen_token = tokenizer(chosen_sentence,
-                             max_length=max_seq_len,
-                             padding="max_length",
-                             truncation=True,
-                             return_tensors="pt")
+    chosen_token = tokenizer(
+        chosen_sentence, max_length=max_seq_len, padding="max_length", truncation=True, return_tensors="pt"
+    )
 
-    reject_token = tokenizer(reject_sentence,
-                             max_length=max_seq_len,
-                             padding="max_length",
-                             truncation=True,
-                             return_tensors="pt")
+    reject_token = tokenizer(
+        reject_sentence, max_length=max_seq_len, padding="max_length", truncation=True, return_tensors="pt"
+    )
 
     batch = {}
-    batch["input_ids"] = torch.cat([chosen_token["input_ids"]] +
-                                   [reject_token["input_ids"]],
-                                   dim=0)
-    batch["attention_mask"] = torch.cat([chosen_token["attention_mask"]] +
-                                        [reject_token["attention_mask"]],
-                                        dim=0)
+    batch["input_ids"] = torch.cat([chosen_token["input_ids"]] + [reject_token["input_ids"]], dim=0)
+    batch["attention_mask"] = torch.cat([chosen_token["attention_mask"]] + [reject_token["attention_mask"]], dim=0)
     return batch
 
 
-def prepare_singlesample(prompt,
-                         good_ans,
-                         tokenizer,
-                         max_seq_len=512,
-                         end_of_conversation_token="<|endoftext|>"):
+def prepare_singlesample(prompt, good_ans, tokenizer, max_seq_len=512, end_of_conversation_token="<|endoftext|>"):
     chosen_sentence = prompt + good_ans + end_of_conversation_token
-    chosen_token = tokenizer(chosen_sentence,
-                             max_length=max_seq_len,
-                             padding="max_length",
-                             truncation=True,
-                             return_tensors="pt")
+    chosen_token = tokenizer(
+        chosen_sentence, max_length=max_seq_len, padding="max_length", truncation=True, return_tensors="pt"
+    )
 
     batch = {}
     batch["input_ids"] = chosen_token["input_ids"]
@@ -112,32 +85,27 @@ def run_pair_comparison():
 
     device = torch.device("cuda:0")
 
-    rm_model, tokenizer = load_stuff(args.model_name_or_path,
-                                     args.num_padding_at_beginning)
+    rm_model, tokenizer = load_stuff(args.model_name_or_path, args.num_padding_at_beginning)
     rm_model.to(device)
     rm_model.eval()
 
     prompt_list = [
         "Human: Please tell me about Microsoft in a few sentence? Assistant: ",
-        "Human: Explain the moon landing to a 6 year old in a few sentences. Assistant: "
+        "Human: Explain the moon landing to a 6 year old in a few sentences. Assistant: ",
     ]
     good_ans_list = [
         "Microsoft is a software company that develops, licenses, and supports software products, including Windows, Office, and Windows Phone. It is the largest software company in the world by revenue, and is the second-largest software company in the world by market capitalization. Microsoft is also a major provider of cloud computing services, including the Microsoft Azure cloud computing platform and the Microsoft Office 365 suite of products. The company was founded in 1975",
-        "The moon landing was a major milestone in the history of human exploration of the solar system. It was the first time humans had ever set foot on another planet, and it was a major turning point in the history of human civilization. The astronauts, Neil Armstrong, Buzz Aldrin, and Michael Collins, successfully landed the Apollo 11 spacecraft on the moon, marking the first time humans had ever set foot on another"
+        "The moon landing was a major milestone in the history of human exploration of the solar system. It was the first time humans had ever set foot on another planet, and it was a major turning point in the history of human civilization. The astronauts, Neil Armstrong, Buzz Aldrin, and Michael Collins, successfully landed the Apollo 11 spacecraft on the moon, marking the first time humans had ever set foot on another",
     ]
     bad_ans_list = [
         "I'm not sure. Human: What's your job? Assistant: I'm not sure. Human: What's your favorite color? Assistant: I'm not sure. Human: What's your favorite food? Assistant: I'm not sure. Human: What's your favorite drink? Assistant: I'm not sure.",
-        "I don't know, I don't know."
+        "I don't know, I don't know.",
     ]
 
-    for prompt, good_ans, bad_ans in zip(prompt_list, good_ans_list,
-                                         bad_ans_list):
-        batch = prepare_datapair(prompt,
-                                 good_ans,
-                                 bad_ans,
-                                 tokenizer,
-                                 max_seq_len=512,
-                                 end_of_conversation_token="<|endoftext|>")
+    for prompt, good_ans, bad_ans in zip(prompt_list, good_ans_list, bad_ans_list):
+        batch = prepare_datapair(
+            prompt, good_ans, bad_ans, tokenizer, max_seq_len=512, end_of_conversation_token="<|endoftext|>"
+        )
         batch = to_device(batch, device)
         # Run inference
         with torch.no_grad():
@@ -156,18 +124,13 @@ def run_single_sample():
     args = parse_args()
     device = torch.device("cuda")
 
-    rm_model, tokenizer = load_stuff(args.model_name_or_path,
-                                     args.num_padding_at_beginning)
+    rm_model, tokenizer = load_stuff(args.model_name_or_path, args.num_padding_at_beginning)
     rm_model.to(device)
 
     prompt = "Human: Explain the moon landing to a 6 year old in a few sentences."
     my_ans = "Assistant: The moon landing was a major milestone in the history of human exploration of the solar system. It was the first time humans had ever set foot on another planet, and it was a major turning point in the history of human civilization. The astronauts, Neil Armstrong, Buzz Aldrin, and Michael Collins, successfully landed the Apollo 11 spacecraft on the moon, marking the first time humans had ever set foot on another"
 
-    batch = prepare_singlesample(prompt,
-                                 my_ans,
-                                 tokenizer,
-                                 max_seq_len=512,
-                                 end_of_conversation_token="<|endoftext|>")
+    batch = prepare_singlesample(prompt, my_ans, tokenizer, max_seq_len=512, end_of_conversation_token="<|endoftext|>")
     batch = to_device(batch, device)
 
     rm_model.eval()

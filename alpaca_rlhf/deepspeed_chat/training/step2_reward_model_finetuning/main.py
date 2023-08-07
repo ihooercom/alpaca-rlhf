@@ -175,12 +175,10 @@ def main():
         os.makedirs(str(run_dir))
     wandb.init(
         config=args,
-        # entity="knowl",
         project=project_name,
         name=experiment_name + "_" + datetime_utils.now(),
         dir=run_dir,
         job_type="training",
-        # reinit=True,
         notes=socket.gethostname(),
     )
 

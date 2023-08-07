@@ -111,7 +111,7 @@ def parse_args():
     parser.add_argument(
         "--num_padding_at_beginning",
         type=int,
-        default=1,
+        default=0,
         help="OPT model has a fixed number (1) of padding tokens at the beginning of the input. We did not see this in other models but keep it as an option for now.",
     )
     parser.add_argument(
@@ -305,7 +305,6 @@ def create_datasets(args, tokenizer, train_phase=3):
 def main():
     args = parse_args()
 
-    wandb.login(key="6c52cf61837ddd8efa62755b86139c41bbad09ec")
     project_name = "rlhf"
     experiment_name = "rlhf-step3"
     run_dir = os.path.join(args.data_output_path, "log", project_name, experiment_name)
@@ -313,12 +312,10 @@ def main():
         os.makedirs(str(run_dir))
     wandb.init(
         config=args,
-        entity="knowl",
         project=project_name,
         name=experiment_name + "_" + datetime_utils.now(),
         dir=run_dir,
         job_type="training",
-        reinit=True,
         notes=socket.gethostname(),
     )
 

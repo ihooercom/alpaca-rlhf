@@ -65,7 +65,7 @@ class DeepSpeedPPOTrainer:
 
         with torch.no_grad():
             seq = self.actor_model.module.generate(
-                prompts, attention_mask=mask, max_length=max_min_length, min_length=max_min_length
+                prompts, attention_mask=mask, max_length=max_min_length  # , min_length=max_min_length
             )
 
         # Filter out seq with no answers (or very short). This happens when users directly use the pre-training ckpt without supervised finetuning
@@ -82,7 +82,8 @@ class DeepSpeedPPOTrainer:
             else:
                 eos_inds = (seq[i][prompt_length:] == self.tokenizer.eos_token_id).nonzero()
                 eos_ind = eos_inds[0].item() + prompt_length if len(eos_inds) > 0 else max_min_length
-                seq[i][eos_ind + 1 :] = self.tokenizer.pad_token_id
+                # seq[i][eos_ind + 1 :] = self.tokenizer.pad_token_id
+                assert (seq[i][eos_ind + 1 :] == self.tokenizer.pad_token_id).all()
 
                 out_seq.append(seq[i : i + 1])
         out_seq = torch.cat(out_seq, dim=0)  # concate output in the batch dim

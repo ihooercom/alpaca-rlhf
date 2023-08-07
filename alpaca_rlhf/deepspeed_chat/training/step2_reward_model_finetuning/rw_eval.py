@@ -45,6 +45,7 @@ def load_stuff(model_name_or_path, num_padding_at_beginning):
     tokenizer.bos_token_id = 1
     tokenizer.eos_token_id = 2
     tokenizer.add_eos_token = True
+    tokenizer.padding_side = "right"
     model = create_critic_model(model_name_or_path, tokenizer, None, num_padding_at_beginning, True)
 
     return model, tokenizer
@@ -103,8 +104,10 @@ def run_pair_comparison():
     ]
 
     for prompt, good_ans, bad_ans in zip(prompt_list, good_ans_list, bad_ans_list):
+        # end_of_conversation_token = "<|endoftext|>"
+        end_of_conversation_token = ""
         batch = prepare_datapair(
-            prompt, good_ans, bad_ans, tokenizer, max_seq_len=512, end_of_conversation_token="<|endoftext|>"
+            prompt, good_ans, bad_ans, tokenizer, max_seq_len=512, end_of_conversation_token=end_of_conversation_token
         )
         batch = to_device(batch, device)
         # Run inference

@@ -140,7 +140,8 @@ class DeepSpeedPPOTrainer:
         reward_clip = torch.clamp(reward_score, -self.clip_reward_value, self.clip_reward_value)
         batch_size = log_probs.shape[0]
         for j in range(batch_size):
-            rewards[j, start : ends[j]][-1] += reward_clip[j]
+            # rewards[j, start : ends[j]][-1] += reward_clip[j]
+            rewards[j, ends[j] - 1] += reward_clip[j]
 
         return rewards
 
@@ -161,7 +162,7 @@ class DeepSpeedPPOTrainer:
         old_values = values
         with torch.no_grad():
             old_rewards = self.compute_rewards(prompts, log_probs, ref_log_probs, reward_score, action_mask)
-            advantages, returns = self.get_advantages_and_returns(old_values, old_rewards, start)
+            advantages, returns = self.get_advantages_and_returns(old_values, old_rewards, action_mask, start)
 
         ### process the new outputs
         batch = {"input_ids": seq, "attention_mask": attention_mask}
@@ -200,16 +201,16 @@ class DeepSpeedPPOTrainer:
         vf_loss = 0.5 * torch.sum(torch.max(vf_loss1, vf_loss2) * mask) / mask.sum()
         return vf_loss
 
-    def get_advantages_and_returns(self, values, rewards, start):
+    def get_advantages_and_returns(self, values, rewards, action_mask, start):
         # Adopted from https://github.com/CarperAI/trlx/blob/main/trlx/models/modeling_ppo.py#L134
         # todo: bug, should omit the padding at the end
         lastgaelam = 0
         advantages_reversed = []
         length = rewards.size()[-1]
         for t in reversed(range(start, length)):
-            nextvalues = values[:, t + 1] if t < length - 1 else 0.0
+            nextvalues = values[:, t + 1] * action_mask[:, t + 1] if t < length - 1 else 0.0
             delta = rewards[:, t] + self.gamma * nextvalues - values[:, t]
-            lastgaelam = delta + self.gamma * self.lam * lastgaelam
+            lastgaelam = delta + self.gamma * self.lam * lastgaelam * action_mask[:, t + 1] if t < length - 1 else delta
             advantages_reversed.append(lastgaelam)
         advantages = torch.stack(advantages_reversed[::-1], dim=1)
         returns = advantages + values[:, start:]
